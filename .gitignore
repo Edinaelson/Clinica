@@ -1,0 +1,63 @@
+# Arquivo .gitignore para projetos .NET 8 e Blazor
+
+# Build e publicação
+bin/
+obj/
+out/
+publish/
+
+# Pacotes NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+*.nuspec
+
+# Arquivos de usuário e configurações locais
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.vs/
+.vscode/
+.idea/
+
+# Logs e relatórios
+*.log
+TestResults/
+*.coverage
+*.coveragexml
+
+# Diretórios de dependências
+node_modules/
+bower_components/
+
+# Arquivos temporários
+*.tmp
+*.temp
+*.bak
+
+# Configurações do sistema operacional
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Arquivos de publicação do Blazor
+wwwroot/dist/
+wwwroot/node_modules/
+
+# Configurações de ambiente
+.env
+.env.*
+
+# Arquivos de cache
+*.cache
+
+# Outros arquivos gerados
+*.pdb
+*.mdb
+*.db
+*.sqlite
+
+# Diretórios de deploy do Blazor
+wwwroot/_framework/
