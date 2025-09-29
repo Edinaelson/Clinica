@@ -4,12 +4,14 @@ using Clinica.Data;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Radzen;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.AddRadzenComponents();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityUserAccessor>();
@@ -23,7 +25,9 @@ builder.Services.AddAuthentication(options =>
     })
     .AddIdentityCookies();
 
+//Configurações para SQLite
 builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlite("Data Source=User.db"));
+builder.Services.AddDbContext<ApplicationDbContextClinica>(options => options.UseSqlite("Data Source=Clinica.db"));
 
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
