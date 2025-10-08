@@ -1,0 +1,59 @@
+﻿@inject Data.ApplicationDbContextClinica Db
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+@rendermode InteractiveServer
+
+
+<div class="dialog-content">
+    <div class="dialog-body">
+        <RadzenTextBox Placeholder="Nome" @bind-Value="PacienteEditado.Nome" class="w-100 mb-2"/>
+        <RadzenTextBox Placeholder="Email" @bind-Value="PacienteEditado.Email" class="w-100 mb-2"/>
+        <RadzenTextBox Mask="(00) 00000-0000" Pattern="[^0-9]" Placeholder="Telefone"
+                    @bind-Value="PacienteEditado.Telefone" class="w-100 mb-2"/>
+        <RadzenDatePicker @bind-Value="PacienteEditado.DataNascimento" DateFormat="dd/MM/yyyy"
+                          class="w-100 mb-2" ShowTime="false"/>
+    </div>
+</div>
+
+<div class="dialog-footer">
+    <RadzenButton Click="@(async () => await Salvar())" ButtonStyle="ButtonStyle.Primary" Text="Salvar" class="me-2"/>
+    <RadzenButton Click="Cancel" ButtonStyle="ButtonStyle.Secondary" Text="Cancelar"/>
+</div>
+
+@code {
+    [Parameter] public Cliente Paciente { get; set; }
+
+    private void Cancel() => DialogService.Close();
+
+    private Cliente PacienteEditado = new();
+
+    protected override void OnInitialized()
+    {
+        // Copia para edição local
+        PacienteEditado = new Cliente
+        {
+            Id = Paciente.Id,
+            Nome = Paciente.Nome,
+            Telefone = Paciente.Telefone,
+            DataNascimento = Paciente.DataNascimento,
+            Email = Paciente.Email
+        };
+    }
+
+    private async Task Salvar()
+    {
+        var cliente = await Db.Clientes.FindAsync(PacienteEditado.Id);
+        if (cliente != null)
+        {
+            cliente.Nome = PacienteEditado.Nome;
+            cliente.Email = PacienteEditado.Email;
+            cliente.Telefone = PacienteEditado.Telefone;
+            cliente.DataNascimento = PacienteEditado.DataNascimento;
+            await Db.SaveChangesAsync();
+            NotificationService.Notify(NotificationSeverity.Success, "Sucesso", "Cliente atualizado com sucesso!", 3000);
+
+            DialogService.Close(PacienteEditado);
+        }
+    }
+}

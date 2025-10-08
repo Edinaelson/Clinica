@@ -1,0 +1,155 @@
+﻿@using Clinica.Models
+@using Microsoft.EntityFrameworkCore
+@inject DialogService DialogService
+@inject Data.ApplicationDbContextClinica Db
+@inject NotificationService NotificationService
+
+<RadzenTemplateForm TItem="Agendamento" Data="@model" Submit="@OnSubmit">
+    <RadzenStack Gap="1rem">
+        <!-- Título -->
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenLabel Text="Título" Style="width: 6rem;" />
+            <RadzenDropDown @bind-Value="@selectedProcedimentoId"
+                            Data="@procedimentos"
+                            TextProperty="Nome"
+                            ValueProperty="Id"
+                            Placeholder="Selecione"
+                            Style="width: 14rem;" />
+        </RadzenStack>
+
+        <!-- Cliente -->
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenLabel Text="Paciente" Style="width: 6rem;" />
+            <RadzenDropDown @bind-Value="@selectedClienteId"
+                            Data="@clientes"
+                            TextProperty="Nome"
+                            ValueProperty="Id"
+                            Placeholder="Selecione"
+                            Style="width: 14rem;" />
+        </RadzenStack>
+        
+        <!-- Status -->
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenLabel Text="Status" Style="width: 6rem"/>
+            <RadzenDropDown @bind-Value="@selectedStatusId"
+                            Data="@status"
+                            TextProperty="StatusText"
+                            ValueProperty="Id"
+                            Placeholder="Selecione"
+                            Style="width: 14rem"/>
+
+        </RadzenStack>
+        <!-- Início -->
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenLabel Text="Início" Style="width: 6rem;" />
+            <RadzenDatePicker @bind-Value="@dataInicio"
+                              Name="Start"
+                              ShowTime="true"
+                              Style="width: 14rem;" />
+        </RadzenStack>
+
+        <!-- Fim -->
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenLabel Text="Fim" Style="width: 6rem;" />
+            <RadzenDatePicker @bind-Value="@dataFim"
+                              Name="End"
+                              ShowTime="true"
+                              Style="width: 14rem;" />
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Start">
+            
+        </RadzenStack>
+        
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End">
+            <RadzenButton ButtonType="ButtonType.Submit" Text="Salvar"/>
+        </RadzenStack>
+        
+    </RadzenStack>
+</RadzenTemplateForm>
+
+@code {
+    [Parameter]
+    public Agendamento Appointment { get; set; } = new();
+
+    Agendamento model = new();
+
+    DateTime? dataInicio;
+    DateTime? dataFim;
+
+    List<Procedimento> procedimentos = new();
+    List<Cliente> clientes = new();
+    List<Status> status = new ();
+
+    int selectedTituloId;
+    int selectedClienteId;
+    int selectedProcedimentoId;
+    int selectedStatusId;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        clientes = await Db.Clientes.ToListAsync();
+        procedimentos = await Db.Procedimentos.ToListAsync();
+        status = await Db.Status.ToListAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        model = Appointment;
+
+        if (model.DataAgendamento.HasValue && model.HoraInicio.HasValue)
+            dataInicio = model.DataAgendamento.Value.Date.Add(model.HoraInicio.Value);
+
+        if (model.DataAgendamento.HasValue && model.HoraFim.HasValue)
+            dataFim = model.DataAgendamento.Value.Date.Add(model.HoraFim.Value);
+
+        // Preencher os IDs selecionados para os dropdowns
+        selectedProcedimentoId = model.Procedimento?.Id ?? 0;
+        selectedClienteId = model.Cliente?.Id ?? 0;
+        selectedStatusId = model.Status?.Id ?? 0;
+    }
+
+    async Task OnSubmit(Agendamento model)
+    {
+        var agendamento = await Db.Agendamentos
+            .Include(p => p.Procedimento)
+            .Include(a => a.Cliente)
+            .Include(a => a.Status)
+            .FirstOrDefaultAsync(a => a.Id == model.Id);
+
+        if (agendamento == null)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Erro", "Agendamento não encontrado.");
+            return;
+        }
+
+        var procedimento = await Db.Procedimentos.FindAsync(selectedProcedimentoId);
+        var cliente = await Db.Clientes.FindAsync(selectedClienteId);
+        
+        var statu = await Db.Status.FindAsync(selectedStatusId); // Altere aqui se tiver status diferente
+
+        if (procedimento == null || cliente == null || dataInicio == null)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Erro", "Preencha todos os campos.");
+            return;
+        }
+
+        if (dataFim == null || dataInicio > dataFim)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Erro", "Hora inicio é maior que hora de terminio");
+            return;
+        }
+
+        agendamento.DataAgendamento = dataInicio.Value.Date;
+        agendamento.HoraInicio = dataInicio.Value.TimeOfDay;
+        agendamento.HoraFim = dataFim.Value.TimeOfDay;
+        agendamento.Procedimento = procedimento;
+        agendamento.Cliente = cliente;
+        agendamento.Status = statu;
+        
+        await Db.SaveChangesAsync();
+
+        NotificationService.Notify(NotificationSeverity.Success, "Sucesso", "Agendamento atualizado!");
+        DialogService.Close(agendamento);
+    }
+}

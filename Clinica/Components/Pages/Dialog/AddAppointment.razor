@@ -1,0 +1,222 @@
+﻿@using Clinica.Models
+@using Clinica.Services
+@using Microsoft.EntityFrameworkCore
+@inject DialogService DialogService
+@inject Data.ApplicationDbContextClinica Db
+@inject NotificationService NotificationService
+@inject EmailService EmailService
+<RadzenTemplateForm TItem="Agendamento" Data="@model" Submit="@OnSubmit">
+    <RadzenStack Gap="1rem">
+
+        <!-- Dropdown de Título -->
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenLabel Text="Título" Style="width: 6rem;" />
+
+            @if (Procedimento != null)
+            {
+                <!-- Mostra o título fixo -->
+                @* <RadzenLabel Text="@Procedimento.Nome" *@
+                @*              Style="width: 14rem; font-weight: bold; color: green;" /> *@
+
+                <RadzenDropDown @bind-Value="@selectedProcedimentoId"
+                Data="@procedimentos"
+                TextProperty="Nome"
+                ValueProperty="Id"
+                Disabled="true"
+                Style="width: 14rem; color: forestgreen;" />
+            }
+            else
+            {
+                <!-- Permite escolher o título normalmente -->
+                <RadzenDropDown @bind-Value="@selectedProcedimentoId"
+                Data="@procedimentos"
+                TextProperty="Nome"
+                ValueProperty="Id"
+                Placeholder="Selecione um título"
+                Style="width: 14rem;" />
+            }
+        </RadzenStack>
+
+
+        <!-- Dropdown de Cliente -->
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenLabel Text="Cliente" Style="width: 6rem;" />
+            <RadzenDropDown @bind-Value="@selectedClienteId"
+            Data="@clientes"
+            TextProperty="Nome"
+            ValueProperty="Id"
+            Placeholder="Selecione um cliente"
+            Style="width: 14rem;" />
+        </RadzenStack>
+
+        <!-- Dropdown de Stutus fixo -->
+
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenLabel Text="Status" Style="width: 6rem; "/>
+            <RadzenDropDown @bind-Value="@selectedStatusId" 
+            Data="@statuses"
+            TextProperty="StatusText"
+            ValueProperty="Id"
+            Disabled="false"
+            />
+
+        </RadzenStack>
+
+        <!-- Campo Data/Hora de Início -->
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenLabel Text="Início" Style="width: 6rem;" />
+            <RadzenDatePicker @bind-Value="@startDateTime" Name="Start" ShowTime="true" Style="width: 14rem;" />
+        </RadzenStack>
+
+        <!-- Campo Data/Hora de Fim -->
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenLabel Text="Fim" Style="width: 6rem;" />
+            <RadzenDatePicker @bind-Value="@endDateTime" Name="End" ShowTime="true" Style="width: 14rem;" />
+        </RadzenStack>
+
+        <!-- Botão Salvar -->
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End">
+            <RadzenButton ButtonType="ButtonType.Submit" Text="Salvar" />
+        </RadzenStack>
+
+    </RadzenStack>
+</RadzenTemplateForm>
+
+@code {
+    [Parameter] public DateTime Start { get; set; }
+    [Parameter] public DateTime End { get; set; }
+    [Parameter] public Procedimento Procedimento { get; set; }
+
+    Agendamento model = new Agendamento();
+
+    List<Procedimento> procedimentos = new();
+    List<Cliente> clientes = new();
+    List<Agendamento> agendamentos = new();
+    List<Status> statuses = new();
+
+    int selectedTituloId;
+    int selectedClienteId;
+    int selectedProcedimentoId;
+    int selectedAgendamentoId;
+    int selectedStatusId;
+
+    DateTime startDateTime;
+    DateTime endDateTime;
+
+    Agendamento novoAgendamento = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        procedimentos = await Db.Procedimentos.ToListAsync();
+        clientes = await Db.Clientes.ToListAsync();
+        statuses = await Db.Status.ToListAsync();
+
+        if(Procedimento != null)
+        {
+            novoAgendamento.ProcedimentoId = Procedimento.Id;
+            novoAgendamento.Procedimento = Procedimento;
+            selectedProcedimentoId = Procedimento.Id;
+
+            Console.WriteLine("Procedimento ID: " + selectedProcedimentoId);
+
+        }
+
+        startDateTime = DateTime.Now;
+        endDateTime = startDateTime.AddHours(1);
+        selectedStatusId = 4; //Agendado
+    }
+
+    async Task OnSubmit(Agendamento model)
+    {
+
+        var procedimento = procedimentos.FirstOrDefault(p => p.Id == selectedProcedimentoId);
+        var cliente = clientes.FirstOrDefault(c => c.Id == selectedClienteId);
+        var status = statuses.FirstOrDefault(s => s.Id == selectedStatusId);
+        var agendadamento = agendamentos.FirstOrDefault(a => a.Id == selectedAgendamentoId);
+
+        if (procedimento == null || cliente == null)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Erro", "Selecione um título e um cliente válido.");
+            return;
+        }
+
+        model.DataAgendamento = startDateTime.Date;
+        model.HoraInicio = startDateTime.TimeOfDay;
+        model.HoraFim = endDateTime.TimeOfDay;
+
+        model.ProcedimentoId = procedimento.Id;
+        model.ClienteId = cliente.Id;
+        model.StatusId = status.Id; // Exemplo: Status inicial padrão (como "Agendado"). Ajuste o ID conforme seu banco.
+
+        // Não deixe os objetos de navegação preenchidos para o EF não tentar inserir Titulo/Cliente de novo
+        model.Procedimento = null!;
+        model.Cliente = null!;
+        model.Status = null!;
+
+        try
+        {
+
+            var agendamento = new Agendamento
+                {
+                    HoraInicio = startDateTime.TimeOfDay,
+                    HoraFim = endDateTime.TimeOfDay,
+                    ClienteId = cliente.Id,
+                    ProcedimentoId = Procedimento != null
+                    ? Procedimento.Id
+                    : selectedProcedimentoId, // pega do dropdown se não veio fixo
+                
+                };
+
+            Db.Agendamentos.Add(model);
+            await Db.SaveChangesAsync();
+            
+            // Verificar se já existe relatório para este agendamento
+            var relatorioExistente = await Db.RelatoriosConsultas
+                .FirstOrDefaultAsync(r => r.AgendamentoId == model.Id);
+            
+            if (relatorioExistente == null)
+            {
+                var relatorio = new RelatorioConsulta
+                {
+                    AgendamentoId = model.Id,
+                    DataAgendada = model.DataAgendamento.Value,
+                    ClienteId = cliente.Id
+                };
+
+                Db.RelatoriosConsultas.Add(relatorio);
+                await Db.SaveChangesAsync();
+            }
+            
+            // Criar e salvar relatório no banco
+            
+            /*
+            var relatorio = new RelatorioConsulta
+            {
+                AgendamentoId = model.Id,
+                //Preco = procedimento.Preco,
+                DataAgendada = model.DataAgendamento.Value,
+                ClienteId = cliente.Id
+            };
+
+            Db.RelatoriosConsultas.Add(relatorio);
+            await Db.SaveChangesAsync();
+            
+            */
+
+            // Enviar e-mail após salvar
+            var clienteEmail = cliente.Email;
+            var assunto = "Confirmação de Agendamento";
+            var mensagem = $"Olá {cliente.Nome}, seu agendamento foi realizado com sucesso para o dia {startDateTime:dd/MM/yyyy} às {startDateTime:HH:mm}.";
+            
+            //TODO email desativado para testes, descomentar para ativar
+            //await EmailService.SendEmailAsync(clienteEmail, assunto, mensagem);
+
+            NotificationService.Notify(NotificationSeverity.Success, "Sucesso", "Agendamento salvo com sucesso e e-mail enviado.");
+            DialogService.Close(model);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Erro ao salvar", ex.Message);
+        }
+    }
+}
