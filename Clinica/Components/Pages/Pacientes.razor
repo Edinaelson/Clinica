@@ -1,0 +1,225 @@
+﻿@page "/pacientes"
+@using Microsoft.EntityFrameworkCore
+@using Clinica.Components.Pages.Dialog
+
+@inject Data.ApplicationDbContextClinica Db
+@inject DialogService DialogService
+@inject NotificationService NotificationService 
+
+@rendermode InteractiveServer
+
+
+<RadzenButton Text="Cadastrar Cliente"
+              Icon="person_add"
+              Style="margin-bottom:20px"
+              Click="@OpenAddDialog"
+              ButtonStyle="ButtonStyle.Success" />
+
+<RadzenTextBox @bind-Value="SearchTerm"
+               Placeholder="Buscar por nome..."
+               Immediate="true"
+               Style="width: 100%; margin-bottom: 10px"
+               Adornment="Adornment.Start" />
+
+<RadzenDataGrid TItem="Cliente"
+                Data="@filteredPacientes"
+                AllowPaging="true"
+                PageSize="10"
+                AllowFiltering="false"
+                AllowSorting="true"
+                ColumnWidth="200px"
+                ShowPagingSummary="true">
+
+    <Columns>
+        <RadzenDataGridColumn TItem="Cliente" Property="Nome" Title="Nome" />
+        <RadzenDataGridColumn TItem="Cliente" Property="Email" Title="Email" />
+        <RadzenDataGridColumn TItem="Cliente" Property="Telefone" Title="Telefone" />
+        <RadzenDataGridColumn TItem="Cliente" Property="DataNascimento" Title="Data de Nascimento"
+                              FormatString="{0:dd/MM/yyyy}" />
+
+        <RadzenDataGridColumn TItem="Cliente" Title="Ações">
+            <Template Context="paciente">
+                <RadzenButton Icon="edit"
+                              ButtonStyle="ButtonStyle.Info"
+                              Size="ButtonSize.Small"
+                              Class="mr-1"
+                              Click="@(args => OpenDialog(paciente))" />
+                <RadzenButton Icon="delete"
+                              ButtonStyle="ButtonStyle.Danger"
+                              Size="ButtonSize.Small"
+                              Click="@(args => DeletePaciente(paciente))" />
+            </Template>
+        </RadzenDataGridColumn>
+    </Columns>
+</RadzenDataGrid>
+
+@code {
+
+    private List<Cliente> pacientes = new();
+    private List<Cliente> filteredPacientes = new();
+    private string searchTerm = string.Empty;
+    private bool firstRender = true;
+
+    private string SearchTerm
+    {
+        get => searchTerm;
+        set
+        {
+            if (searchTerm != value)
+            {
+                searchTerm = value;
+                FilterPacientes(searchTerm);
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            pacientes = await Db.Clientes.ToListAsync();
+            FilterPacientes(searchTerm);
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() =>
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Error,
+                    Summary = "Erro",
+                    Detail = $"Erro ao carregar pacientes: {ex.Message}",
+                    Duration = 5000
+                });
+            });
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRenderRender)
+    {
+        if (firstRender && firstRenderRender)
+        {
+            firstRender = false;
+
+            if (pacientes == null || !pacientes.Any())
+            {
+                await InvokeAsync(() =>
+                {
+                    NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Info,
+                        Summary = "Informação",
+                        Detail = "Nenhum paciente encontrado",
+                        Duration = 3000 // 3 segundos
+                    });
+                });
+            }
+        }
+    }
+
+    private void FilterPacientes(string value)
+    {
+        searchTerm = value;
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            filteredPacientes = pacientes;
+        }
+        else
+        {
+            filteredPacientes = pacientes
+                .Where(p => p.Nome.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
+
+    private async Task OpenAddDialog()
+    {
+        var options = new DialogOptions { Width = "600px", CloseDialogOnEsc = true, ShowClose = true };
+
+        var result = await DialogService.OpenAsync<PacienteAddDialog>(
+            "Adicionar paciente",
+            parameters: null,
+            options: options
+        );
+
+        if (result is Cliente novo)
+        {
+            pacientes.Add(novo);
+            FilterPacientes(searchTerm);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OpenDialog(Cliente paciente)
+    {
+        var options = new DialogOptions
+        {
+            Width = "600px",
+            CloseDialogOnEsc = true,
+            ShowClose = true
+        };
+
+        var parameters = new Dictionary<string, object>
+        {
+            { "Paciente", paciente }
+        };
+
+        var result = await DialogService.OpenAsync<PacienteEditDialog>(
+            "Editar paciente",
+            parameters,
+            options
+        );
+
+        if (result is Cliente atualizado)
+        {
+            var index = pacientes.FindIndex(p => p.Id == atualizado.Id);
+            if (index != -1)
+            {
+                pacientes[index] = atualizado;
+                FilterPacientes(searchTerm);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async Task DeletePaciente(Cliente paciente)
+    {
+        bool? confirm = await DialogService.Confirm("Tem certeza que deseja deletar este paciente?", "Deletar Paciente");
+
+        if (confirm == true)
+        {
+            try
+            {
+                Db.Clientes.Remove(paciente);
+                await Db.SaveChangesAsync();
+
+                pacientes.Remove(paciente);
+                FilterPacientes(searchTerm);
+
+                await InvokeAsync(() =>
+                {
+                    NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Success,
+                        Summary = "Sucesso",
+                        Detail = "Paciente deletado com sucesso!",
+                        Duration = 3000 // 3 segundos
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                await InvokeAsync(() =>
+                {
+                    NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Error,
+                        Summary = "Erro",
+                        Detail = $"Erro ao deletar paciente: {ex.Message}",
+                        Duration = 5000
+                    });
+                });
+            }
+        }
+    }
+}

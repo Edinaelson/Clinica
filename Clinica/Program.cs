@@ -1,6 +1,7 @@
 using Clinica.Components;
 using Clinica.Components.Account;
 using Clinica.Data;
+using Clinica.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -9,14 +10,20 @@ using Radzen;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddRazorComponents()
+
+builder.Services
+    .AddRazorComponents()
     .AddInteractiveServerComponents();
+
 builder.Services.AddRadzenComponents();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityUserAccessor>();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
+
+builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<RelatorioPdfService>();
 
 builder.Services.AddAuthentication(options =>
     {
@@ -25,8 +32,8 @@ builder.Services.AddAuthentication(options =>
     })
     .AddIdentityCookies();
 
-//Configurações para SQLite
-builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlite("Data Source=User.db"));
+//Configuraï¿½ï¿½es para SQLite
+builder.Services.AddDbContext<ApplicationDbContext>(options =>options.UseSqlite("Data Source=User.db"));
 builder.Services.AddDbContext<ApplicationDbContextClinica>(options => options.UseSqlite("Data Source=Clinica.db"));
 
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
@@ -53,13 +60,14 @@ else
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
 
+app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
 
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
