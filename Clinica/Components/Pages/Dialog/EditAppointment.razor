@@ -4,6 +4,8 @@
 @inject Data.ApplicationDbContextClinica Db
 @inject NotificationService NotificationService
 
+@rendermode InteractiveServer
+
 <RadzenTemplateForm TItem="Agendamento" Data="@model" Submit="@OnSubmit">
     <RadzenStack Gap="1rem">
         <!-- Título -->
