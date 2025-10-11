@@ -51,11 +51,15 @@
     private Procedimento ProcedimentoEditado = new();
     private string? previewImage;       // Base64 para preview
     private IBrowserFile? tempFile;     // Arquivo temporário em memória
-    private InputFile fileInput;
-    
+    private InputFile? fileInput;
+    private ElementReference fileInputElement;
+
     private async Task TriggerFileUpload()
     {
-        await JS.InvokeVoidAsync("triggerClick", fileInput.Element);
+        if (fileInput != null)
+        {
+            await JS.InvokeVoidAsync("eval", "document.querySelector('input[type=file]').click()");
+        }
     }
 
     private async Task OnInputFileChange(InputFileChangeEventArgs e)

@@ -1,0 +1,255 @@
+﻿@page "/agenda"
+@using Clinica.Data
+@using Clinica.Components.Pages.Dialog
+@using Clinica.Components.Shared
+@using Microsoft.EntityFrameworkCore
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+
+@rendermode InteractiveServer
+<style>
+    /* Remove margens/paddings internas que quebram o arredondamento */
+    .rz-scheduler {
+        border-radius: 12px !important;
+        overflow: hidden;
+    }
+
+    .rz-scheduler-header,
+    .rz-scheduler-footer,
+    .rz-scheduler-content {
+        border-radius: 0 !important;
+        border: none !important;
+    }
+
+    /* Remove as bordas internas duplicadas */
+    .rz-scheduler-content > div {
+        border: none !important;
+    }
+
+    /* Aplica visual limpo e sem conflitos */
+    .rz-scheduler .rz-scheduler-header,
+    .rz-scheduler .rz-scheduler-footer {
+        background: #f9f9f9;
+    }
+
+    /* Remove sombras ou bordas indesejadas que atrapalham o arredondamento */
+    .rz-scheduler-content {
+        box-shadow: none !important;
+    }
+</style>
+
+
+<div style="justify-items: center">
+<RadzenStack Orientation="Orientation.Horizontal"
+             AlignItems="AlignItems.Center"
+             Gap="0.5rem" class="rz-p-4 rz-mb-6 rz-border-radius-1"
+             Style="border: 1px solid #ccc; height:3rem; border-radius: 10px; width: 940px;">
+    <RadzenLabel Text="Show Header:  " />
+    <RadzenSwitch @bind-Value=@showHeader />
+</RadzenStack>
+</div>
+<div style="justify-items: center">
+    <RadzenScheduler @ref="scheduler"
+                     SlotRender=@OnSlotRender
+                     Style="height: 570px; width: 940px; border: 1px solid #ccc; border-radius: 12px; overflow: hidden;"
+                     TItem="Agendamento"
+                     Data=@appointments
+                     StartProperty="Start"
+                     EndProperty="End"
+                     ShowHeader=@showHeader
+                     TextProperty="Text"
+                     SelectedIndex="2"
+                     SlotSelect=@OnSlotSelect
+                     AppointmentSelect=@OnAppointmentSelect
+                     AppointmentRender=@OnAppointmentRender
+                     DaySelect="@OnDaySelect"
+                     AppointmentMove=@OnAppointmentMove >
+    
+        <RadzenDayView />
+        <RadzenWeekView />
+        <RadzenMonthView />
+    
+    </RadzenScheduler>
+</div>
+
+
+<EventConsole @ref=@console />
+@code {
+    
+    [Inject] public ApplicationDbContextClinica Db { get; set; }
+
+    List<Agendamento> appointments = new();
+    
+    protected override async Task OnInitializedAsync()
+    {
+        appointments = await Db.Agendamentos
+            .Where(a => a.DataAgendamento != null && a.HoraInicio != null && a.HoraFim != null)
+            .Include(a => a.Procedimento)
+            .Include(a => a.Cliente)
+            .Include(a => a.Status)
+            .AsNoTracking()
+            .ToListAsync();
+    }
+    
+    RadzenScheduler<Agendamento> scheduler;
+    
+    EventConsole console;
+    Dictionary<DateTime, string> events = new Dictionary<DateTime, string>();
+
+    bool showHeader = true;
+    
+    void OnDaySelect(SchedulerDaySelectEventArgs args)
+    {
+        console.Log($"DaySelect: Day={args.Day} AppointmentCount={args.Appointments.Count()}");
+    }
+
+    void OnSlotRender(SchedulerSlotRenderEventArgs args)
+    {
+        // Highlight today in month view
+        if (args.View.Text == "Month" && args.Start.Date == DateTime.Today)
+        {
+            args.Attributes["style"] = "background: var(--rz-scheduler-highlight-background-color, rgba(255,220,40,.2));";
+        }
+
+        // Highlight working hours (9-18)
+        if ((args.View.Text == "Week" || args.View.Text == "Day") && args.Start.Hour > 8 && args.Start.Hour < 19)
+        {
+            args.Attributes["style"] = "background: var(--rz-scheduler-highlight-background-color, rgba(255,220,40,.2));";
+        }
+    }
+
+    async Task OnSlotSelect(SchedulerSlotSelectEventArgs args)
+    {
+        //args.Start = DateTime.Now;
+        args.End = args.Start.AddHours(1);
+        
+        try
+        {
+            if (args == null)
+            {
+                NotificationService.Notify(NotificationSeverity.Error, "Erro", "Parâmetro args está nulo.");
+                return;
+            }
+
+            console?.Log($"Slot selecionado: Start={args.Start}, End={args.End}, View={(args.View?.Text ?? "null")}");
+
+            if (args.View != null && args.View.Text != "Year")
+            {
+                if (DialogService == null)
+                {
+                    NotificationService.Notify(NotificationSeverity.Error, "Erro", "DialogService está nulo.");
+                    return;
+                }
+                
+                var start = args.Start;
+                var end = start.AddHours(1);
+                
+                var data = await DialogService.OpenAsync<AddAppointment>("Novo Agendamento",
+                    new Dictionary<string, object>
+                    {
+                        { "Start", start },
+                        { "End", end }
+                    });
+
+                if (data != null)
+                {
+                    appointments ??= new List<Agendamento>();
+                    appointments.Add(data);
+
+                    if (scheduler != null)
+                    {
+                        await scheduler.Reload();
+                    }
+                    else
+                    {
+                        NotificationService.Notify(NotificationSeverity.Warning, "Aviso", "scheduler é nulo.");
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Erro inesperado no OnSlotSelect", ex.Message);
+            console?.Log($"Erro no OnSlotSelect: {ex}");
+        }
+    }
+    
+    async Task OnAppointmentSelect(SchedulerAppointmentSelectEventArgs<Agendamento> args)
+    {
+        if (args.Data == null)
+        {
+            console.Log("AppointmentSelect: args.Data is null");
+            return;
+        }
+
+        console.Log($"AppointmentSelect: Appointment Cliente={(args.Data.Cliente?.Nome ?? "Cliente null", args.Data.Procedimento.Nome)}");
+
+        var copy = new Agendamento
+        {
+            Id = args.Data.Id,
+            DataAgendamento = args.Data.DataAgendamento,
+            HoraInicio = args.Data.HoraInicio,
+            HoraFim = args.Data.HoraFim,
+            Procedimento = args.Data.Procedimento,
+            Cliente = args.Data.Cliente,
+            Status = args.Data.Status
+        };
+
+        var result = await DialogService.OpenAsync<EditAppointment>("Editar Agendamento", new Dictionary<string, object> { { "Appointment", copy } });
+
+        if (result != null)
+        {
+            args.Data.DataAgendamento = result.DataAgendamento;
+            args.Data.HoraInicio = result.HoraInicio;
+            args.Data.HoraFim = result.HoraFim;
+            //args.Data.Procedimento = result.Procedimento;
+            args.Data.Cliente = result.Cliente;
+            args.Data.Status = result.Status;
+
+            await Db.SaveChangesAsync();
+            await scheduler.Reload();
+        }
+    }
+
+
+
+    void OnAppointmentRender(SchedulerAppointmentRenderEventArgs<Agendamento> args)
+    {
+        // Never call StateHasChanged in AppointmentRender - would lead to infinite loop
+
+        switch (args.Data.Status.StatusText)
+        {
+            case("Cancelado"):
+                args.Attributes["style"] = "background: #E43939";
+                break;
+            
+            case("Pendente"):
+                args.Attributes["style"] = "background: #D47F2A";
+                break;
+                
+        }
+        
+        Console.WriteLine(args.Data.Status.StatusText);
+        
+    }
+
+    async Task OnAppointmentMove(SchedulerAppointmentMoveEventArgs args)
+    {
+        var draggedAppointment = args.Appointment.Data as Agendamento;
+
+        if (draggedAppointment != null)
+        {
+            var startAntigo = draggedAppointment.Start;
+            var endAntigo = draggedAppointment.End;
+            var duration = endAntigo - startAntigo;
+
+            draggedAppointment.DataAgendamento = args.SlotDate.Date;
+            draggedAppointment.HoraInicio = args.SlotDate.TimeOfDay;
+            draggedAppointment.HoraFim = draggedAppointment.HoraInicio + duration;
+
+            await Db.SaveChangesAsync();
+            await scheduler.Reload();
+        }
+    }
+
+}
