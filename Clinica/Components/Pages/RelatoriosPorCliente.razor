@@ -1,0 +1,246 @@
+@page "/relatorios"
+@using Clinica.Data
+@using Clinica.Services
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+
+@inject NotificationService NotificationService
+@inject ApplicationDbContextClinica Db
+@inject RelatorioPdfService PdfService
+@inject EmailService EmailService
+
+<style>
+    .gradientColor{
+        background: linear-gradient(90deg,rgba(42, 51, 155, 1) 0%, rgba(87, 171, 199, 1) 50%, rgba(42, 51, 155, 1) 100%);
+        -webkit-background-clip: text; /* Para navegadores baseados em WebKit (Chrome, Safari) */
+        background-clip: text;
+        color: transparent; /* Torna a cor do texto transparente para que o gradiente apareça */
+        display: inline-block; /* Importante para que o gradiente se aplique corretamente ao texto */
+    }
+    
+    .gradientColorEmail{
+        background: #2a649b;
+        background: linear-gradient(90deg, rgba(42, 100, 155, 1) 0%, rgba(47, 107, 160, 1) 0%, rgba(87, 171, 199, 1) 50%, rgba(42, 108, 155, 1) 100%);
+    }
+    
+</style>
+
+@if (relatorios?.Count > 0)
+{
+    <RadzenButton 
+        Icon="@BotaoIcone" 
+        Text="@BotaoTexto" 
+        Click="EnviarUltimaConsultaValida" 
+        Disabled="@(!relatorios?.Any(r => r.DataAgendada >= DateTime.Today) ?? true)" 
+        ButtonStyle="ButtonStyle.Primary"
+        Style="
+        position: fixed;
+        bottom: 45px;
+        right: 20px;
+        z-index: 9999;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        border-radius: 50px;
+        padding: 12px 20px;" />
+}
+
+<h3>Relatórios de Consultas por Cliente</h3>
+
+<RadzenDropDown TValue="int"
+                Data="@clientes"
+                TextProperty="Nome"
+                ValueProperty="Id"
+                @bind-Value="clienteSelecionadoId"
+                Placeholder="Selecione um cliente"
+                Change="@(async _ => await CarregarRelatorios())"
+                Style="width: 300px; margin-bottom: 1rem;" />
+
+@if (relatorios != null && clienteSelecionadoId != 0)
+{
+    <RadzenDataList Data="@relatorios" TItem="RelatorioConsulta" Context="relatorio">
+        <Template Context="relatorio">
+            <div style="padding: 10px; border: 1px solid #ccc; margin-bottom: 10px; border-radius: 6px;">
+                <p class="gradientColor"><b>Procedimento:</b> @relatorio.Agendamento?.Procedimento?.Nome</p>
+                <p><b>Data:</b> @relatorio.DataAgendada.ToString("dd/MM/yyyy")</p>
+                <p><b>Preço:</b> @relatorio.Agendamento?.Procedimento?.Preco.ToString("C")</p>
+
+                <RadzenButton Icon="email"
+                              Text="Enviar por Email"
+                              Size="ButtonSize.Small"
+                              Click="@(() => EnviarConsultaIndividual(relatorio))"
+                              ButtonStyle="ButtonStyle.Info" 
+                              Style="margin-top: 10px;" />
+            </div>
+        </Template>
+    </RadzenDataList>
+}
+@if(relatorios?.Count == 0){
+    <div style="
+     display: flex;
+     align-items: center;
+     justify-content: center">
+        <h2 class="gradientColor">Sem relatorios do cliente</h2>
+    </div>
+}
+
+@code {
+    List<Cliente> clientes = new();
+    List<RelatorioConsulta>? relatorios;
+    int clienteSelecionadoId;
+   
+
+    private bool enviandoEmail = false;
+    private string BotaoTexto = "📤 Enviar Última Consulta por Email";
+    private string BotaoIcone = "send";
+
+    protected override async Task OnInitializedAsync()
+    {
+        clientes = await Db.Clientes.OrderBy(c => c.Nome).ToListAsync();
+    }
+
+    async Task CarregarRelatorios()
+    {
+        relatorios = await Db.RelatoriosConsultas
+            .Where(r => r.ClienteId == clienteSelecionadoId && r.Agendamento.Status.StatusText.ToString() != "Cancelado" )
+            .Include(a=> a.Agendamento)
+            .ThenInclude(a => a.Procedimento)
+            .OrderByDescending(r => r.DataAgendada)
+            .ToListAsync();
+        StateHasChanged();
+    }
+    
+    
+    async Task EnviarRelatorioPorEmail()
+    {
+        var cliente = clientes.FirstOrDefault(c => c.Id == clienteSelecionadoId);
+        if (cliente is null || relatorios is null || !relatorios.Any())
+            return;
+
+        var logoPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "logo.png");
+
+        var pdfBytes = PdfService.GerarRelatorio(relatorios, cliente.Nome, logoPath);
+
+        var assunto = "Resumo das suas consultas";
+        var mensagem = $"Olá {cliente.Nome},\n\nEm anexo está o resumo das suas consultas/procedimentos com a nossa clínica.\n\nAgradecemos a confiança!\n\nEquipe da Clínica.";
+
+        await EmailService.SendEmailWithAttachmentAsync(
+            cliente.Email,
+            assunto,
+            mensagem,
+            pdfBytes,
+            "relatorio.pdf");
+        
+        NotificationService.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Success,
+            Summary = "E-mail enviado",
+            Detail = "O relatório foi enviado com sucesso para o cliente!",
+            Duration = 3000
+        });
+    }
+    
+    async Task EnviarUltimaConsultaValida()
+{
+    var cliente = clientes.FirstOrDefault(c => c.Id == clienteSelecionadoId);
+    if (cliente == null || relatorios == null || relatorios.Count == 0)
+        return;
+
+    var ultimaConsulta = relatorios
+        .Where(r => r.DataAgendada.Date >= DateTime.Today)
+        .OrderByDescending(r => r.DataAgendada)
+        .FirstOrDefault();
+
+    if (ultimaConsulta == null)
+    {
+        NotificationService.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Warning,
+            Summary = "Nenhuma consulta válida",
+            Detail = "A última consulta é de uma data passada.",
+            Duration = 4000
+        });
+        return;
+    }
+
+    try
+    {
+        enviandoEmail = true;
+        BotaoTexto = "Enviando...";
+        BotaoIcone = "hourglass_empty";
+        StateHasChanged();
+
+        var logoPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "logo.png");
+
+        var pdfBytes = PdfService.GerarRelatorio(new List<RelatorioConsulta> { ultimaConsulta }, cliente.Nome, logoPath);
+
+        var assunto = "📄 Relatório da sua próxima consulta";
+        var corpo = $@"Olá {cliente.Nome},<br><br>
+                Segue em anexo o relatório da sua próxima consulta.<br><br>
+                Atenciosamente,<br>Clínica Saúde";
+
+        await EmailService.SendEmailWithAttachmentAsync(cliente.Email, assunto, corpo, pdfBytes, "relatorio.pdf");
+
+        BotaoTexto = "✔️ Enviado com sucesso!";
+        BotaoIcone = "check_circle";
+
+        NotificationService.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Success,
+            Summary = "Relatório enviado!",
+            Detail = "A última consulta foi enviada por e-mail com sucesso.",
+            Duration = 4000
+        });
+
+        await Task.Delay(3000);
+        BotaoTexto = "📤 Enviar Última Consulta por Email";
+        BotaoIcone = "send";
+    }
+    catch (Exception ex)
+    {
+        BotaoTexto = "Erro ao Enviar";
+        BotaoIcone = "error";
+
+        NotificationService.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Error,
+            Summary = "Erro ao enviar",
+            Detail = ex.Message,
+            Duration = 5000
+        });
+
+        await Task.Delay(3000);
+        BotaoTexto = "📤 Enviar Última Consulta por Email";
+        BotaoIcone = "send";
+    }
+    finally
+    {
+        enviandoEmail = false;
+        StateHasChanged();
+    }
+}
+    async Task EnviarConsultaIndividual(RelatorioConsulta consulta)
+    {
+        var cliente = clientes.FirstOrDefault(c => c.Id == clienteSelecionadoId);
+        if (cliente == null)
+            return;
+
+        var logoPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "logo.png");
+
+        var pdfBytes = PdfService.GerarRelatorio(new List<RelatorioConsulta> { consulta }, cliente.Nome, logoPath);
+
+        var assunto = "📄 Relatório da sua consulta";
+        var corpo = $"Olá {cliente.Nome},<br><br>Segue em anexo o relatório da sua consulta.<br><br>Atenciosamente,<br>Clínica Saúde";
+
+        await EmailService.SendEmailWithAttachmentAsync(cliente.Email, assunto, corpo, pdfBytes, "relatorio.pdf");
+
+        NotificationService.Notify(new NotificationMessage
+        {
+            Severity = NotificationSeverity.Success,
+            Summary = "Relatório enviado",
+            Detail = $"Consulta de {consulta.DataAgendada:dd/MM/yyyy} enviada com sucesso.",
+            Duration = 4000
+        });
+    }
+    
+
+}
