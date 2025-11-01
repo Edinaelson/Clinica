@@ -3,6 +3,9 @@
 @using Clinica.Components.Pages.Dialog
 @using Clinica.Components.Pages.Dialog.Procedimentos
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+
 @inject ApplicationDbContextClinica Db
 @inject NavigationManager Navigation
 @inject DialogService DialogService
