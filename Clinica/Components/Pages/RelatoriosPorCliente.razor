@@ -4,11 +4,12 @@
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
-
 @inject NotificationService NotificationService
 @inject ApplicationDbContextClinica Db
 @inject RelatorioPdfService PdfService
 @inject EmailService EmailService
+@rendermode InteractiveServer
+
 
 <style>
     .gradientColor{
