@@ -44,29 +44,38 @@
 
 <RadzenTextBox @bind-Value="filtro" Placeholder="🔍 Pesquisar procedimento..." Style="width: 300px; margin-bottom: 20px;" />
 
-<RadzenRow>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.8rem;">
     @foreach (var item in Procedimento.Where(p => string.IsNullOrEmpty(filtro) || p.Nome.Contains(filtro, StringComparison.OrdinalIgnoreCase)))
     {
-        <RadzenColumn Width="3">
-            <RadzenCard Style="margin-bottom: 1rem; width: 190px;">
-                <div class="p-2" style="text-align: center">
-                    <h4 class="gradientColor">@item.Nome</h4>
-                </div>
-                <img src="@item.UrlImage" alt="@item.Nome" style="width: 100%; height: 140px; object-fit: cover; border: 8px;"/>
-                <div class="p-2">
-                    <p>Preço: @item.Preco.ToString("C")</p>
-                </div>
-                <RadzenButton 
-                Text="Agendar" 
-                Icon="add_circle" 
-                ButtonStyle="ButtonStyle.Primary" 
-                Click="@(args => AbrirDialogAgendamento(item))" 
+        <RadzenCard Style="display: flex; flex-direction: column; min-height: 200px; padding: 0.6rem;">
+            <div style="text-align: center; min-height: 35px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.4rem;">
+                <h6 class="gradientColor" style="margin: 0; font-size: 0.75rem; font-weight: 600; line-height: 1.2;">@item.Nome</h6>
+            </div>
+            <img src="@item.UrlImage" alt="@item.Nome" style="width: 100%; height: 80px; object-fit: cover; border-radius: 4px; margin-bottom: 0.4rem;"/>
+            <div style="flex-grow: 1; display: flex; align-items: center; margin-bottom: 0.4rem;">
+                <p style="margin: 0; font-size: 0.7rem;"><strong>Preço:</strong> @item.Preco.ToString("C")</p>
+            </div>
+            <div style="display: flex; gap: 0.3rem;">
+                <RadzenButton
+                Text="Agendar"
+                Icon="add_circle"
+                ButtonStyle="ButtonStyle.Primary"
+                Size="ButtonSize.ExtraSmall"
+                Style="flex: 1; font-size: 0.46rem; padding: 0.3rem;"
+                Click="@(args => AbrirDialogAgendamento(item))"
                 />
-            </RadzenCard>
-        </RadzenColumn>
+                <RadzenButton
+                Text="Excluir"
+                Icon="remove"
+                ButtonStyle="ButtonStyle.Danger"
+                Size="ButtonSize.ExtraSmall"
+                Style="flex: 1; font-size: 0.46rem; padding: 0.3rem;"
+                Click="@(args => ExcluirProcedimento(item))"
+                />
+            </div>
+        </RadzenCard>
     }
-
-</RadzenRow>
+</div>
 
 <!-- Botão flutuante -->
 <div style="position: fixed; top: 40px; right: 30px; z-index: 1000;">
@@ -132,6 +141,48 @@
         {
             Procedimento.Add(novo);
             StateHasChanged();
+        }
+    }
+
+    async Task ExcluirProcedimento(Procedimento procedimento)
+    {
+        try
+        {
+            var confirmado = await DialogService.Confirm(
+                $"Tem certeza que deseja excluir o procedimento '{procedimento.Nome}'?",
+                "Confirmar Exclusão",
+                new ConfirmOptions() { OkButtonText = "Sim", CancelButtonText = "Não" }
+            );
+
+            if (confirmado == true)
+            {
+                // Remove do banco de dados
+                Db.Procedimentos.Remove(procedimento);
+                await Db.SaveChangesAsync();
+
+                // Remove da lista local
+                Procedimento.Remove(procedimento);
+
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "Procedimento excluído",
+                    Detail = $"O procedimento '{procedimento.Nome}' foi excluído com sucesso.",
+                    Duration = 3000
+                });
+
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Error,
+                Summary = "Erro ao excluir",
+                Detail = ex.Message,
+                Duration = 5000
+            });
         }
     }
 }

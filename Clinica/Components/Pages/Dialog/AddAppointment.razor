@@ -124,8 +124,9 @@
 
         }
 
-        startDateTime = DateTime.Now;
-        endDateTime = startDateTime.AddHours(1);
+        // Usa os parâmetros Start e End passados ao diálogo
+        startDateTime = Start != default(DateTime) ? Start : DateTime.Now;
+        endDateTime = End != default(DateTime) ? End : startDateTime.AddHours(1);
         selectedStatusId = 4; //Agendado
     }
 
