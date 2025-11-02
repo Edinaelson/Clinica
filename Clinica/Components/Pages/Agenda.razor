@@ -220,20 +220,33 @@
     {
         // Never call StateHasChanged in AppointmentRender - would lead to infinite loop
 
-        switch (args.Data.Status.StatusText)
+        if (args.Data.Status != null)
         {
-            case("Cancelado"):
-                args.Attributes["style"] = "background: #E43939";
-                break;
-            
-            case("Pendente"):
-                args.Attributes["style"] = "background: #D47F2A";
-                break;
-                
+            var statusText = args.Data.Status.StatusText?.ToLower() ?? "";
+
+            Console.WriteLine($"Status: '{args.Data.Status.StatusText}' | Lower: '{statusText}'");
+
+            if (statusText.Contains("cancelado"))
+            {
+                args.Attributes["style"] = "background: #dc3545"; // Vermelho
+            }
+            else if (statusText.Contains("pendente"))
+            {
+                args.Attributes["style"] = "background: #fd7e14"; // Laranja
+            }
+            else if (statusText.Contains("concluído") || statusText.Contains("concluido"))
+            {
+                args.Attributes["style"] = "background: #28a745"; // Verde
+            }
+            else if (statusText.Contains("confirmado"))
+            {
+                args.Attributes["style"] = "background: #17a2b8"; // Azul
+            }
+            else
+            {
+                args.Attributes["style"] = "background: #6c757d"; // Cinza padrão
+            }
         }
-        
-        Console.WriteLine(args.Data.Status.StatusText);
-        
     }
 
     async Task OnAppointmentMove(SchedulerAppointmentMoveEventArgs args)
